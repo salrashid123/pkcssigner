@@ -17,6 +17,7 @@ var ()
 
 type PKCS struct {
 	priv crypto.Signer
+	//_ crypto.MessageSigner // introduced in https://tip.golang.org/doc/go1.25#cryptopkgcrypto
 
 	X509Certificate *x509.Certificate // public x509 certificate for the signer
 
@@ -75,6 +76,20 @@ func (t PKCS) Public() crypto.PublicKey {
 func (t PKCS) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	t.refreshMutex.Lock()
 	defer t.refreshMutex.Unlock()
+	return t.priv.Sign(rand, digest, opts)
+}
+
+func (t PKCS) SignMessage(rand io.Reader, msg []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+	t.refreshMutex.Lock()
+	defer t.refreshMutex.Unlock()
+
+	sigHash := opts.HashFunc()
+	if !sigHash.Available() {
+		return nil, fmt.Errorf("messagesignerwrapper: hash function [%s] not available", sigHash.String())
+	}
+	hsh := sigHash.New()
+	hsh.Write(msg)
+	digest := hsh.Sum(nil)
 	return t.priv.Sign(rand, digest, opts)
 }
 
